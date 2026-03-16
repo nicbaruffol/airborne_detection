@@ -7,7 +7,7 @@
 #SBATCH --gpus=rtx_4090:1  # Request 1 GPU
 #SBATCH --output=transform_train_%j.log
 #SBATCH --error=transform_train_%j.err   # Error log file
-#SBATCH --tmp=1000g 
+#SBATCH --tmp=700G   
 
 
 
@@ -24,18 +24,17 @@ source $HOME/airborne_detection/airbone/bin/activate
 # 3. Navigate into the seg_tracker directory FIRST
 cd /cluster/home/nbaruffol/airborne_detection/seg_tracker
 
-# 1. Define where the data is, and where it's going
-NETWORK_DIR="/cluster/scratch/nbaruffol/airborne_dataset_new"
+# 1. Define where the tar file is, and the target extraction folder
+NETWORK_TAR="/cluster/scratch/nbaruffol/airborne_dataset_new.tar"
 LOCAL_DIR="$TMPDIR/airborne_dataset_new"
 
-# 2. Copy the dataset to the node's local SSD
-echo "Starting data transfer to local SSD..."
-mkdir -p $LOCAL_DIR
+# 2. Extract the dataset directly to the node's local SSD
+echo "Starting data extraction to local SSD..."
 
-# rsync is much better than 'cp' for millions of small files. 
-# The -a flag preserves file structures, -q keeps it quiet so it doesn't flood your logs
-rsync -aq $NETWORK_DIR/ $LOCAL_DIR/
-echo "Data transfer complete!"
+# -x extracts, -f specifies the file, and -C dictates where to unpack it
+tar -xf $NETWORK_TAR -C $TMPDIR
+
+echo "Data extraction complete!"
 
 # 3. Export the new fast path as an environment variable so Python can find it
 export FAST_DATA_DIR=$LOCAL_DIR
