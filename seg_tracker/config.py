@@ -1,7 +1,10 @@
-DATA_DIR = '/opt/data2/air_track'
-SRC_DATA_DIR = '../data'
+import os
 
-IMG_FORMAT = 'png'
+# Look for 'FAST_DATA_DIR'. If it's not set, default to your scratch folder.
+DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/airborne_dataset_new')
+SRC_DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/airborne_dataset_new')
+
+IMG_FORMAT = 'jpg'
 
 UPPER_BOUND_MIN_DIST = 330
 UPPER_BOUND_MAX_DIST = 700
@@ -10,7 +13,7 @@ MAX_PREDICT_DISTANCE = 2000
 
 OFFSET_SCALE = 256.0
 
-MIN_OBJECT_AREA = 100
+MIN_OBJECT_AREA = 100   
 IS_MATCH_MIN_IOU_THRESH = 0.2
 IS_NO_MATCH_MAX_IOU_THRESH = 0.02
 MIN_SECS = 3.0

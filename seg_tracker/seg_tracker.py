@@ -26,14 +26,32 @@ class SegDetector:
     def __init__(self):
         models_dir = 'data/models'
 
+        # 1. The Transformation Model (Background alignment)
         self.model_transform = models_transformation.TrEstimatorTsm(
             cfg=dict(
                 base_model_name="resnet34",
                 weight_scale=3
             ), pretrained=False)
-        self.model_transform.load_state_dict(torch.load(f'{models_dir}/030_tr_tsn_rn34_w3_crop_borders_255_0.pth')["model_state_dict"])
+        self.model_transform.load_state_dict(torch.load('/cluster/home/nbaruffol/airborne_detection/output/checkpoints/030_tr_tsn_rn34_w3_crop_borders/0/260.pt')["model_state_dict"])
         self.model_transform = self.model_transform.cuda()
         self.model_transform.eval()
+
+        # 2. YOUR New Segmentation Model (Drone finding)
+        self.model_seg = models_segmentation.HRNetSegmentation(
+            cfg=dict(
+                base_model_name="hrnet_w32",
+                input_frames=2,
+                feature_location='',
+                combine_outputs_dim=512,
+                output_binary_mask=True,
+                output_above_horizon=True,
+                pred_scale=8
+            ), pretrained=False)
+        
+        checkpoint = torch.load('output/checkpoints/120_hrnet32_all/0/2220.pt')
+        self.model_seg.load_state_dict(checkpoint["model_state_dict"])      # <--- FIXED!
+        self.model_seg = self.model_seg.cuda()
+        self.model_seg.eval()
 
         # self.model_seg = models_segmentation.DLASegmentation(
         #     cfg=dict(
@@ -51,61 +69,28 @@ class SegDetector:
         #
         # self.model_seg.load_state_dict(torch.load(f'{models_dir}/100_dla32_fpm_1100.pth')['model_state_dict'], strict=False)
 
-        self.model_seg1 = models_segmentation.HRNetSegmentation(
-            cfg=dict(
-                base_model_name="hrnet_w32",
-                input_frames=2,
-                feature_location='',
-                combine_outputs_dim=512,
-                combine_outputs_kernel=1,
-                output_binary_mask=True,
-                output_above_horizon=True,
-                pred_scale=8
-            ),
-            pretrained=False
-        )
-
-        self.model_seg1.load_state_dict(torch.load(f'{models_dir}/120_hrnet32_all_2220.pth')['model_state_dict'], strict=False)
-        self.model_seg1 = self.model_seg1.cuda()
-        self.model_seg1.eval()
-
-        self.model_seg2 = models_segmentation.EffDetSegmentation8x(
-            cfg=dict(
-                base_model_name="tf_efficientdet_d2",
-                custom_backbone="gernet_m",
-                input_frames=2,
-                output_binary_mask=True,
-                output_above_horizon=True,
-                pred_scale=8
-            ),
-            pretrained=False
-        )
-
-        self.model_seg2.load_state_dict(torch.load(f'{models_dir}/120_gernet_m_b2_all_2220.pth')['model_state_dict'], strict=False)
-        self.model_seg2 = self.model_seg2.cuda()
-        self.model_seg2.eval()
-
-        self.model_dla = models_segmentation.DLA8xSeparateHeads(
-            cfg=dict(
-                base_model_name="dla60_res2next",
-                input_frames=2,
-                feature_location='',
-                combine_outputs_dim=256,
-                combine_outputs_kernel=1,
-                output_binary_mask=True,
-                output_above_horizon=True,
-                pred_scale=8
-            ),
-            pretrained=False
-        )
-
-        self.model_dla.load_state_dict(torch.load(f'{models_dir}/120_dla60_256_sgd_all_rerun_2220.pth')['model_state_dict'], strict=False)
-        self.model_dla = self.model_seg2.cuda()
-        self.model_dla.eval()
-
-        # self.model_seg3 = models_segmentation.EffDetSegmentation8x(
+        # self.model_seg1 = models_segmentation.HRNetSegmentation(
         #     cfg=dict(
-        #         base_model_name="tf_efficientdet_d5",
+        #         base_model_name="hrnet_w32",
+        #         input_frames=2,
+        #         feature_location='',
+        #         combine_outputs_dim=512,
+        #         combine_outputs_kernel=1,
+        #         output_binary_mask=True,
+        #         output_above_horizon=True,
+        #         pred_scale=8
+        #     ),
+        #     pretrained=False
+        # )
+
+        # self.model_seg1.load_state_dict(torch.load(f'{models_dir}/120_hrnet32_all_2220.pth')['model_state_dict'], strict=False)
+        # self.model_seg1 = self.model_seg1.cuda()
+        # self.model_seg1.eval()
+
+        # self.model_seg2 = models_segmentation.EffDetSegmentation8x(
+        #     cfg=dict(
+        #         base_model_name="tf_efficientdet_d2",
+        #         custom_backbone="gernet_m",
         #         input_frames=2,
         #         output_binary_mask=True,
         #         output_above_horizon=True,
@@ -113,28 +98,61 @@ class SegDetector:
         #     ),
         #     pretrained=False
         # )
-        #
-        # self.model_seg3.load_state_dict(torch.load(f'{models_dir}/120_edet_b5_all_2220.pth')['model_state_dict'], strict=False)
+
+        # self.model_seg2.load_state_dict(torch.load(f'{models_dir}/120_gernet_m_b2_all_2220.pth')['model_state_dict'], strict=False)
+        # self.model_seg2 = self.model_seg2.cuda()
+        # self.model_seg2.eval()
+
+        # self.model_dla = models_segmentation.DLA8xSeparateHeads(
+        #     cfg=dict(
+        #         base_model_name="dla60_res2next",
+        #         input_frames=2,
+        #         feature_location='',
+        #         combine_outputs_dim=256,
+        #         combine_outputs_kernel=1,
+        #         output_binary_mask=True,
+        #         output_above_horizon=True,
+        #         pred_scale=8
+        #     ),
+        #     pretrained=False
+        # )
+
+        # self.model_dla.load_state_dict(torch.load(f'{models_dir}/120_dla60_256_sgd_all_rerun_2220.pth')['model_state_dict'], strict=False)
+        # self.model_dla = self.model_seg2.cuda()
+        # self.model_dla.eval()
+
+        # # self.model_seg3 = models_segmentation.EffDetSegmentation8x(
+        # #     cfg=dict(
+        # #         base_model_name="tf_efficientdet_d5",
+        # #         input_frames=2,
+        # #         output_binary_mask=True,
+        # #         output_above_horizon=True,
+        # #         pred_scale=8
+        # #     ),
+        # #     pretrained=False
+        # # )
+        # #
+        # # self.model_seg3.load_state_dict(torch.load(f'{models_dir}/120_edet_b5_all_2220.pth')['model_state_dict'], strict=False)
+        # # self.model_seg3 = self.model_seg3.cuda()
+        # # self.model_seg3.eval()
+
+        # self.model_seg3 = models_segmentation.HRNetSegmentation(
+        #     cfg=dict(
+        #         base_model_name="hrnet_w48",
+        #         input_frames=2,
+        #         feature_location='',
+        #         combine_outputs_dim=512,
+        #         combine_outputs_kernel=1,
+        #         output_binary_mask=True,
+        #         output_above_horizon=True,
+        #         pred_scale=8
+        #     ),
+        #     pretrained=False
+        # )
+
+        # self.model_seg3.load_state_dict(torch.load(f'{models_dir}/130_hrnet48_all_2220.pth')['model_state_dict'], strict=False)
         # self.model_seg3 = self.model_seg3.cuda()
         # self.model_seg3.eval()
-
-        self.model_seg3 = models_segmentation.HRNetSegmentation(
-            cfg=dict(
-                base_model_name="hrnet_w48",
-                input_frames=2,
-                feature_location='',
-                combine_outputs_dim=512,
-                combine_outputs_kernel=1,
-                output_binary_mask=True,
-                output_above_horizon=True,
-                pred_scale=8
-            ),
-            pretrained=False
-        )
-
-        self.model_seg3.load_state_dict(torch.load(f'{models_dir}/130_hrnet48_all_2220.pth')['model_state_dict'], strict=False)
-        self.model_seg3 = self.model_seg3.cuda()
-        self.model_seg3.eval()
 
         self.frames = 0
 
@@ -153,7 +171,7 @@ class SegDetector:
         img_crop_prev_t = torch.from_numpy(img_crop_prev / 255.0).float().cuda()
 
         with torch.no_grad():
-            with torch.cuda.amp.autocast():
+            with torch.amp.autocast('cuda'):
                 heatmap, offsets = self.model_transform(img_crop_prev_t[None, :], img_crop_t[None, :])
             heatmap = heatmap.detach().float().cpu().numpy()
             offsets = offsets.detach().float().cpu().numpy()
@@ -195,11 +213,11 @@ class SegDetector:
 
         with torch.no_grad():
             '''
-            torch.cuda.amp.autocast()作用：
+            torch.amp.autocast('cuda')作用：
             １）自动混合精度,自动将torch.FloatTensor类型转化为torch.HalfTensor
             ２）包含网络的前向过程(包括loss的计算),不要包含反向传播。
             '''
-            with torch.cuda.amp.autocast(): 
+            with torch.amp.autocast('cuda'): 
                 ## 推理两帧间的图像运动
                 heatmap, offsets = self.model_transform(img_crop_prev_t[None, :], img_crop_t[None, :])
             heatmap = heatmap.detach().float().cpu().numpy() # 1,1,36,60
@@ -252,8 +270,8 @@ class SegDetector:
 
         detected_objects = predict_ensemble.predict_ensemble(
             X=X,
-            models_full_res=[self.model_seg1, self.model_seg2],
-            models_crops=[self.model_seg3, self.model_dla],
+            models_full_res=[self.model_seg],  # <--- Use only your trained model!
+            models_crops=[],                   # <--- Leave the crop models empty
             full_res_threshold=0.35,
             x_offset=-padding
         )

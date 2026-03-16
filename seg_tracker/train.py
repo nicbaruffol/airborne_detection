@@ -25,6 +25,29 @@ from common_utils import DotDict, timeit_context
 from typing import Iterator, Optional, Sequence, List, TypeVar, Generic, Sized
 
 
+import subprocess
+
+def print_gpu_stats():
+    try:
+        # Asks nvidia-smi for the exact compute % and memory usage
+        result = subprocess.check_output(
+            [
+                'nvidia-smi', 
+                '--query-gpu=utilization.gpu,memory.used,memory.total',
+                '--format=csv,noheader,nounits'
+            ], encoding='utf-8')
+        
+        # Parse the output
+        stats = result.strip().split(', ')
+        gpu_util = stats[0]
+        mem_used = stats[1]
+        mem_total = stats[2]
+        
+        print(f"| GPU Load: {gpu_util}% | VRAM: {mem_used}MB / {mem_total}MB |")
+    except Exception as e:
+        print("Could not read GPU stats.")
+
+
 def seed_everything(seed):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -196,6 +219,8 @@ def find_fp_samples(model, dataset: dataset_tracking.TrackingDataset, step: int,
     res = []
 
     data_iter = tqdm(data_loader)
+    nb_batches = 0
+    data_iter = tqdm(data_loader)
     for data in data_iter:
         with torch.set_grad_enabled(False):
             images = combine_images(data, input_frames)
@@ -252,6 +277,9 @@ def find_fp_samples(model, dataset: dataset_tracking.TrackingDataset, step: int,
                 if len(not_matched_objects):
                     max_conf = max(o[0] for o in not_matched_objects)
                     res.append((max_conf, item_idx, tuple(not_matched_objects)))
+        nb_batches += 1
+        if nb_batches % 50 == 0:  # Prints stats every 50 batches
+            print_gpu_stats()
     return res
 
 
@@ -264,7 +292,7 @@ def check_find_fp_samples(experiment_name, epoch):
 
     dataset_train_full_size = dataset_tracking.TrackingDataset(
         stage=dataset_tracking.BaseDataset.STAGE_TRAIN,
-        parts=[2, 3],
+        parts=[1, 2, 3],
         cfg_data={'dataset_params': dict(
             back_steps=[1],
             scale=1,

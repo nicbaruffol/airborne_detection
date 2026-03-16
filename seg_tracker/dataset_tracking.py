@@ -131,7 +131,7 @@ class BaseDataset(torch.utils.data.Dataset):
         else:  # if stage == self.STAGE_VALID:
             self.is_training = False
 
-        parts = [1, 2, 3]
+        parts = [1, 2]
 
         self.frames: List[Frame] = []
         self.frame_nums_with_items: List[int] = []
@@ -166,11 +166,9 @@ class BaseDataset(torch.utils.data.Dataset):
             print('Prepare train/val split')
             df_part1 = pd.read_csv(f'{config.DATA_DIR}/part1/ImageSets/groundtruth.csv')
             df_part2 = pd.read_csv(f'{config.DATA_DIR}/part2/ImageSets/groundtruth.csv')
-            df_part3 = pd.read_csv(f'{config.DATA_DIR}/part3/ImageSets/groundtruth.csv')
             df_part1['part'] = 'part1'
             df_part2['part'] = 'part2'
-            df_part3['part'] = 'part3'
-            df = pd.concat([df_part1, df_part2, df_part3])
+            df = pd.concat([df_part1, df_part2])
             first_fly = df.drop_duplicates(['flight_id', 'part'], ignore_index=True)
             first_fly = first_fly.reset_index(drop=True)
             ts_s = np.array(first_fly.time.values)*1e-9
@@ -193,7 +191,12 @@ class BaseDataset(torch.utils.data.Dataset):
 
         if not os.path.exists(cache_fn):
             frames_dict = {}
-            df = pd.read_csv(f'{config.DATA_DIR}/part{part}/ImageSets/groundtruth.csv')
+            csv_path = f'{config.DATA_DIR}/part{part}/ImageSets/groundtruth.csv'
+            if not os.path.exists(csv_path):    
+                print(f"Skipping part{part} annotations: {csv_path} not found.")
+                return [], [], [] # Returns empty lists if the part doesn't exist
+
+            df = pd.read_csv(csv_path)
             print(df.shape)
             if not self.train_on_all_samples:
                 train_val_ds = pd.read_csv(f'{config.DATA_DIR}/train_val_flights.csv')
@@ -224,7 +227,7 @@ class BaseDataset(torch.utils.data.Dataset):
                 item_id = row['id']
 
                 if not os.path.exists(self.img_fn(part, flight_id, img_name)):
-                    print('skip missing img', self.img_fn(part, flight_id, img_name))
+                    #print('skip missing img', self.img_fn(part, flight_id, img_name))
                     continue
 
                 key = (flight_id, frame_num)

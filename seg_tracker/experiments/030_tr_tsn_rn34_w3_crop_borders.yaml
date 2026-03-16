@@ -18,12 +18,12 @@ dataset_params:
 ###################
 ## Data loader options
 train_data_loader:
-  batch_size: 8
+  batch_size: 16
   num_workers: 16
 
 val_data_loader:
-  batch_size: 8
-  num_workers: 8
+  batch_size: 16
+  num_workers: 16
 
 test_data_loader:
   batch_size: 16
@@ -34,7 +34,7 @@ test_data_loader:
 train_params:
   nb_samples_per_epoch: 2000
   nb_samples_valid: 1000
-  nb_epochs: 260
+  nb_epochs: 500
   optimizer: madgrad
   scheduler: CosineAnnealingWarmRestarts
   scheduler_period: 16
