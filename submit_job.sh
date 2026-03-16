@@ -23,7 +23,7 @@ source $HOME/airborne_detection/airbone/bin/activate
 cd /cluster/home/nbaruffol/airborne_detection/seg_tracker
 
 # 1. Define where the tar file is, and the target extraction folder
-tar -cf /cluster/scratch/nbaruffol/airborne_dataset_new.tar -C /cluster/scratch/nbaruffol airborne_dataset_new
+# tar -cf /cluster/scratch/nbaruffol/airborne_dataset_new.tar -C /cluster/scratch/nbaruffol airborne_dataset_new
 NETWORK_TAR="/cluster/scratch/nbaruffol/airborne_dataset_new.tar"
 LOCAL_DIR="$TMPDIR/airborne_dataset_new"
 

@@ -153,8 +153,17 @@ class BaseDataset(torch.utils.data.Dataset):
 
         print(stage, len(self.frames), len(self.frame_nums_with_items), len(self.frame_nums_with_match_items))
 
-    def img_fn(self, part, flight_id, img_name):
-        return f'{config.DATA_DIR}/part{part}/Images{self.scale_str}/{flight_id}/{img_name}.{config.IMG_FORMAT}'
+    def img_fn(self, part, flight_id, img_name, sensor_type='rgb'):
+        # Assuming your dataset uses suffixes like 'frame001_rgb.jpg' and 'frame001_ir.jpg'
+        base_name = f"{img_name}_{sensor_type}"
+        
+        path = f'{config.DATA_DIR}/part{part}/Images{self.scale_str}/{flight_id}/{base_name}.{config.IMG_FORMAT}'
+        
+        # Fallback for alternative folder structure
+        if not os.path.exists(path):
+            path = f'{config.DATA_DIR}/part{part}/Images{self.scale_str}/part{part}{flight_id}/{base_name}.{config.IMG_FORMAT}'
+            
+        return path
 
     def prepare_train_val_split(self):
         """
@@ -647,20 +656,29 @@ class TrackingDataset(BaseDataset):
             frame_back_steps.append(back_steps)
             prev_frames.append(self.frames[index - back_steps])
 
-        cur_img = cv2.imread(self.img_fn(frame.part, frame.flight_id, frame.img_name), cv2.IMREAD_GRAYSCALE)
+        # Load BOTH modalities for the current frame
+        cur_rgb = cv2.imread(self.img_fn(frame.part, frame.flight_id, frame.img_name, 'rgb'), cv2.IMREAD_GRAYSCALE)
+        cur_ir = cv2.imread(self.img_fn(frame.part, frame.flight_id, frame.img_name, 'ir'), cv2.IMREAD_GRAYSCALE)
 
-        if cur_img is None:
+        if cur_rgb is None or cur_ir is None:
             return self.__getitem__(index + 1)
 
-        prev_images = []
+        # Load BOTH modalities for historical frames
+        prev_rgbs, prev_irs = [], []
         for prev_frame in prev_frames:
-            prev_img = cv2.imread(self.img_fn(prev_frame.part, prev_frame.flight_id, prev_frame.img_name),
-                                  cv2.IMREAD_GRAYSCALE)
-            if prev_img is None:
-                prev_img = cur_img.copy()
-            prev_images.append(prev_img)
+            prev_rgb = cv2.imread(self.img_fn(prev_frame.part, prev_frame.flight_id, prev_frame.img_name, 'rgb'), cv2.IMREAD_GRAYSCALE)
+            prev_ir = cv2.imread(self.img_fn(prev_frame.part, prev_frame.flight_id, prev_frame.img_name, 'ir'), cv2.IMREAD_GRAYSCALE)
+            
+            # Fallback to current frames if historical frames are missing
+            if prev_rgb is None: prev_rgb = cur_rgb.copy()
+            if prev_ir is None: prev_ir = cur_ir.copy()
+                
+            prev_rgbs.append(prev_rgb)
+            prev_irs.append(prev_ir)
 
-        h, w = cur_img.shape
+        h, w = cur_rgb.shape # Update shape reference
+
+
         if self.is_training:
             scale_aug = 2 ** np.random.normal(loc=0.0, scale=0.25)
             scale_aug_x = 2 ** np.random.normal(loc=0.0, scale=0.1)
@@ -794,20 +812,22 @@ class TrackingDataset(BaseDataset):
             item.cx -= crop_x
             item.cy -= crop_y
 
-        crops = []
+        crops_rgb, crops_ir = [], []
 
-        for img, frame_back_step in zip([cur_img] + prev_images, [0] + frame_back_steps):
+        # Zip together the RGBs, IRs, and their transformation steps
+        for img_rgb, img_ir, frame_back_step in zip([cur_rgb] + prev_rgbs, [cur_ir] + prev_irs, [0] + frame_back_steps):
             transform = frames_transform[frame_back_step]
             t = np.array([[1, 0, -crop_x],
                           [0, 1, -crop_y],
                           [0, 0, 1]]) @ transform
 
-            crop = cv2.warpAffine(
-                img,
-                t[:2, :],
-                dsize=(self.crop_w, self.crop_h),
-                flags=cv2.INTER_LINEAR)
-            crops.append(crop)
+            # Warp RGB
+            crop_rgb = cv2.warpAffine(img_rgb, t[:2, :], dsize=(self.crop_w, self.crop_h), flags=cv2.INTER_LINEAR)
+            # Warp IR using the exact same matrix 't'
+            crop_ir = cv2.warpAffine(img_ir, t[:2, :], dsize=(self.crop_w, self.crop_h), flags=cv2.INTER_LINEAR)
+            
+            crops_rgb.append(crop_rgb)
+            crops_ir.append(crop_ir)
 
         res = render_y(cur_step_items, prev_step_items=prev_step_items, w=self.crop_w, h=self.crop_h, pred_scale=self.pred_scale)
 
@@ -817,12 +837,12 @@ class TrackingDataset(BaseDataset):
         res['transform'] = cur_img_transform
         res['is_fpm_sample'] = index in self.fpm_samples
 
-        res['image'] = crops[0]
-        # res['image2'] = cur_img_transformed
-        # res['image_orig'] = cur_img
-        # res['prev_image'] = prev_images[0]
-        for i, prev_img in enumerate(crops[1:]):
-            res[f'prev_image_aligned{i}'] = prev_img
+        # Combine RGB and IR into a 2-channel stack [2, H, W] for the current frame
+        res['image'] = np.stack([crops_rgb[0], crops_ir[0]], axis=0) 
+        
+        # Combine RGB and IR for all previous frames
+        for i, (p_rgb, p_ir) in enumerate(zip(crops_rgb[1:], crops_ir[1:])):
+            res[f'prev_image_aligned{i}'] = np.stack([p_rgb, p_ir], axis=0)
 
         if selected_item is not None:
             res['center_item_w'] = selected_item.w
@@ -838,6 +858,7 @@ class TrackingDataset(BaseDataset):
         if self.return_torch_tensors:
             for k in list(res.keys()):
                 if k == 'image' or k.startswith('prev_image_aligned'):
+                    # Tensors will now naturally be [2, H, W] because of np.stack
                     res[k] = torch.from_numpy(res[k].astype(np.float32) / 255.0).float()
 
                     if self.is_training:
@@ -845,9 +866,6 @@ class TrackingDataset(BaseDataset):
 
                 elif isinstance(res[k], np.ndarray):
                     res[k] = torch.from_numpy(res[k].astype(np.float32)).float()
-
-        # if self.cache_samples and len(self.val_values_cache) < 1000:
-        #     self.val_values_cache[index] = res
 
         return res
 

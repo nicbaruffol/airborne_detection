@@ -40,7 +40,7 @@ class SegDetector:
         self.model_seg = models_segmentation.HRNetSegmentation(
             cfg=dict(
                 base_model_name="hrnet_w32",
-                input_frames=2,
+                input_frames=4,
                 feature_location='',
                 combine_outputs_dim=512,
                 output_binary_mask=True,
@@ -48,7 +48,7 @@ class SegDetector:
                 pred_scale=8
             ), pretrained=False)
         
-        checkpoint = torch.load('output/checkpoints/120_hrnet32_all/0/2220.pt')
+        checkpoint = torch.load('output/checkpoints/120_hrnet32_fused_init.pt')
         self.model_seg.load_state_dict(checkpoint["model_state_dict"])      # <--- FIXED!
         self.model_seg = self.model_seg.cuda()
         self.model_seg.eval()
@@ -244,47 +244,54 @@ class SegDetector:
     '''
     目标检测主函数，参数为当前帧与上一帧图像
     '''
-    def detect_objects(self, image, prev_image):
+   '''
+    目标检测主函数，参数为当前帧与上一帧图像 (NOW SUPPORTS RGB+IR FUSION)
+    '''
+    def detect_objects(self, cur_rgb, cur_ir, prev_rgb, prev_ir):
         batch_size = 1
-        h, w = image.shape
-        padding = (16 + 32 + 64) // 2 #56
-        X = np.zeros((batch_size, 2, h, w + padding * 2), dtype=np.uint8) #1,2,2048,2560
-
-        prev_tr = self.estimate_transformation_full(prev_img=prev_image, img=image)
-
-        ## 仿射变换
-        prev_img_aligned = cv2.warpAffine(
-            prev_image,
-            prev_tr[:2, :],
-            dsize=(w, h),
-            flags=cv2.INTER_LINEAR)
+        h, w = cur_rgb.shape
+        padding = (16 + 32 + 64) // 2 # 56
         
-        # debug: 对比前后变化
-        # fig, axes = plt.subplots(1, 2, figsize=(20, 20))
-        # axes[0].imshow(prev_image, cmap='gray')  # 直接显示灰度图
-        # axes[1].imshow(prev_img_aligned, cmap='gray')  # 显示正确颜色的方法
-        # plt.show()
+        # <--- Expand X to 4 channels instead of 2
+        X = np.zeros((batch_size, 4, h, w + padding * 2), dtype=np.uint8) 
+
+        # 1. Estimate transformation using ONLY the rich RGB textures
+        prev_tr = self.estimate_transformation_full(prev_img=prev_rgb, img=cur_rgb)
+
+        # 2. Warp BOTH previous frames using the RGB-calculated transformation
+        prev_rgb_aligned = cv2.warpAffine(
+            prev_rgb, prev_tr[:2, :], dsize=(w, h), flags=cv2.INTER_LINEAR)
         
-        X[0, 0, :, padding:-padding] = prev_img_aligned  # 利用前一帧转换的帧
-        X[0, 1, :, padding:-padding] = image  # 当前帧
+        prev_ir_aligned = cv2.warpAffine(
+            prev_ir, prev_tr[:2, :], dsize=(w, h), flags=cv2.INTER_LINEAR)
+        
+        # 3. Pack the 4-channel tensor [prev_rgb, prev_ir, cur_rgb, cur_ir]
+        X[0, 0, :, padding:-padding] = prev_rgb_aligned  
+        X[0, 1, :, padding:-padding] = prev_ir_aligned   
+        X[0, 2, :, padding:-padding] = cur_rgb           
+        X[0, 3, :, padding:-padding] = cur_ir            
 
         detected_objects = predict_ensemble.predict_ensemble(
             X=X,
-            models_full_res=[self.model_seg],  # <--- Use only your trained model!
-            models_crops=[],                   # <--- Leave the crop models empty
+            models_full_res=[self.model_seg], 
+            models_crops=[],                   
             full_res_threshold=0.35,
             x_offset=-padding
         )
-
         return detected_objects, prev_tr
 
 
+
+    
 class SegTracker:
     def __init__(self, detector: SegDetector):
         self.detector = detector
 
-    def predict(self, image, prev_image):
-        detected_objects, prev_tr = self.detector.detect_objects(image=image, prev_image=prev_image)
+    def predict(self, cur_rgb, cur_ir, prev_rgb, prev_ir):
+        detected_objects, prev_tr = self.detector.detect_objects(
+            cur_rgb=cur_rgb, cur_ir=cur_ir, prev_rgb=prev_rgb, prev_ir=prev_ir
+        )
+        
 
         res = []
         for detected_object in detected_objects:
