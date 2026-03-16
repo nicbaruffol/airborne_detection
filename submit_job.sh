@@ -16,6 +16,7 @@ module load stack/.2024-05-silent  gcc/13.2.0 python/3.9.18
 #module load       stack/2024-06  gcc/12.2.0 python_cuda/3.11.6
 module load eth_proxy
 
+# tested
 
 # 2. Activate your virtual environment
 source $HOME/airborne_detection/airbone/bin/activate
