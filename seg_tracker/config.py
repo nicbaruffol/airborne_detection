@@ -1,8 +1,8 @@
 import os
 
 # Look for 'FAST_DATA_DIR'. If it's not set, default to your scratch folder.
-DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/airborne_dataset_new')
-SRC_DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/airborne_dataset_new')
+DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/anti_uav_formatted')
+SRC_DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/anti_uav_formatted')
 
 IMG_FORMAT = 'jpg'
 
@@ -32,5 +32,5 @@ NB_CLASSES = len(CLASSES)
 
 
 TRANSFORM_MODEL = '030_tr_tsn_rn34_w3_crop_borders'
-TRANSFORM_MODEL_EPOCH = 255
+TRANSFORM_MODEL_EPOCH = 500
 TRANSFORM_MODEL_FOLD = 0
