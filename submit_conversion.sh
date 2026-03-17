@@ -18,7 +18,8 @@ module load eth_proxy
 source $HOME/airborne_detection/airbone/bin/activate
 
 # 3. Navigate into the seg_tracker directory FIRST
-cd /cluster/home/nbaruffol/airborne_detection/utility
+cd /cluster/home/nbaruffol/airborne_detection/seg_tracker
 
 # 3. Run your Python script
-python -u prepare_anti_uav.py
+FAST_DATA_DIR=/cluster/scratch/nbaruffol/anti_uav_formatted 
+python train_transformation.py predict_dataset_offsets 030_tr_tsn_rn34_w3_crop_borders --part part1

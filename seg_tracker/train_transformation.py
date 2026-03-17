@@ -460,8 +460,8 @@ def predict_dataset_offsets(part='part1'):
 
     for flight_id in tqdm(flight_ids):
         df_flight = df[df.flight_id == flight_id][['img_name', 'frame']].drop_duplicates().reset_index(drop=True)
-        file_names = [f'{config.DATA_DIR}/{part}/Images/{flight_id}/{fn[:-4]}.{config.IMG_FORMAT}' for fn in df_flight.img_name]
-
+        # Force the transformation model to use the texture-rich RGB frames
+        file_names = [f'{config.DATA_DIR}/{part}/Images/{flight_id}/{fn[:-4]}_rgb.{config.IMG_FORMAT}' for fn in df_flight.img_name]
         crop_w = 1024
         crop_h = 1024
         batch_size = 4

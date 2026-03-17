@@ -170,7 +170,8 @@ def combine_images(data, input_frames):
     for img_idx in range(1, input_frames - 1):
         images.append(data[f'prev_image_aligned{img_idx}'].float().cuda())
 
-    return torch.stack(images, dim=1)
+    tack(si  H, W = stacked.shape
+    return stacked.view(B, T * C, H, W)
 
 
 class SkipNSampler(torch.utils.data.Sampler[int]):
@@ -433,9 +434,22 @@ def train(experiment_name: str, fold: int, continue_epoch: int = -1):
     if continue_epoch > -1:
         print(f"{checkpoints_dir}/{continue_epoch:03}.pt")
         checkpoint = torch.load(f"{checkpoints_dir}/{continue_epoch:03}.pt")
-        model.load_state_dict(checkpoint["model_state_dict"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        
+            if k in model_state_dict and state_dict[k].shape != model_state_dict[k].shape:
+                print(f"Adapting weights for {k} from {state_dict[k].shape} to {model_state_dict[k].shape}")
+                old_w = state_dict[k]
+                new_w = model_state_dict[k]
+                if old_w.dim() == 4 and new_w.dim() == 4 and old_w.shape[1] * 2 == new_w.shape[1]:
+                    new_w_cloned = new_w.clone()
+                    new_w_cloned[:, :old_w.shape[1], :, :] = old_w
+                    new_w_cloned[:, old_w.shape[1]:, :, :] = old_w
+                    state_dict[k] = new_w_cloned
+        model.load_state_dict(state_dict, strict=False)
+        try:
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        except ValueError as e:
+            print(f"Skipping optimizer/scheduler state loading due to shape mismatch: {e}")
 
     grad_clip_value = train_params.get("grad_clip", 8.0)
     freeze_backbone_steps = train_params.get("freeze_backbone_steps", 0)
@@ -727,11 +741,10 @@ def check(experiment_name: str, fold: int, epoch: int = -1):
             ax[1, 1].remove()
 
             axbig = fig.add_subplot(gs[:, :2])
-            axbig.imshow(image[0].cpu().numpy(), cmap='gray')
+            axbig.imshow(image[0, 0].cpu().numpy(), cmap='gray')
 
             ax[0, 2].imshow(2 - data['cls'][0, 0].cpu().numpy() - data['cls_planned'][0, 0].cpu().numpy(), vmin=0, vmax=2, cmap='gray')
             ax[1, 2].imshow(pred_cls, vmin=0, vmax=1, cmap='gray')
-
 
             # ax[0, 0].imshow(torch.stack([image_prev0, image, image_prev1], dim=3)[0].cpu().numpy())
             # ax[0, 0].imshow(image[0].cpu().numpy(), cmap='gray')
@@ -970,13 +983,10 @@ def check_sample_crops(experiment_name: str, fold: int, epoch_num: int):
         print(data['idx'], data['crop_x'], data['crop_y'], data['is_fpm_sample'])
 
         plt.imshow(np.stack([
-                data['prev_image_aligned0'].numpy(),
-                data['image'].numpy(),
-                data['prev_image_aligned0'].numpy()
+                data['prev_image_aligned0'][0].numpy(),
+                data['image'][0].numpy(),
+                data['prev_image_aligned0'][0].numpy()
             ], axis=2), vmin=0, vmax=1, cmap='gray')
-
-        plt.show()
-
 
 
 def export_model(experiment_name: str, fold: int, epoch: int):
