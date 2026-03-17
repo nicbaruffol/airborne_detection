@@ -19,15 +19,15 @@ dataset_params:
 ## Data loader options
 train_data_loader:
   batch_size: 16
-  num_workers: 16
+  num_workers: 8
 
 val_data_loader:
   batch_size: 16
-  num_workers: 16
+  num_workers: 8
 
 test_data_loader:
   batch_size: 16
-  num_workers: 16
+  num_workers: 8
 
 ###################
 ## Train params
