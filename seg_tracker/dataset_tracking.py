@@ -131,7 +131,7 @@ class BaseDataset(torch.utils.data.Dataset):
         else:  # if stage == self.STAGE_VALID:
             self.is_training = False
 
-        parts = [1, 2]
+        parts = [1]
 
         self.frames: List[Frame] = []
         self.frame_nums_with_items: List[int] = []
@@ -174,10 +174,10 @@ class BaseDataset(torch.utils.data.Dataset):
         if not os.path.exists(fn):
             print('Prepare train/val split')
             df_part1 = pd.read_csv(f'{config.DATA_DIR}/part1/ImageSets/groundtruth.csv')
-            df_part2 = pd.read_csv(f'{config.DATA_DIR}/part2/ImageSets/groundtruth.csv')
+            # df_part2 = pd.read_csv(f'{config.DATA_DIR}/part2/ImageSets/groundtruth.csv')
             df_part1['part'] = 'part1'
-            df_part2['part'] = 'part2'
-            df = pd.concat([df_part1, df_part2])
+            # df_part2['part'] = 'part2'
+            df = pd.concat([df_part1])
             first_fly = df.drop_duplicates(['flight_id', 'part'], ignore_index=True)
             first_fly = first_fly.reset_index(drop=True)
             ts_s = np.array(first_fly.time.values)*1e-9
@@ -196,28 +196,29 @@ class BaseDataset(torch.utils.data.Dataset):
             suffix = '_all' if self.train_on_all_samples else ''
             cache_fn = f'{config.DATA_DIR}/ds{self.scale_str}_{part}_{stage}{suffix}.pkl'
         print(cache_fn)
-        self.prepare_train_val_split()
+        
+        # REMOVED: self.prepare_train_val_split()
 
         if not os.path.exists(cache_fn):
             frames_dict = {}
             csv_path = f'{config.DATA_DIR}/part{part}/ImageSets/groundtruth.csv'
             if not os.path.exists(csv_path):    
                 print(f"Skipping part{part} annotations: {csv_path} not found.")
-                return [], [], [] # Returns empty lists if the part doesn't exist
+                return [], [], [] 
 
             df = pd.read_csv(csv_path)
-            print(df.shape)
+            print(f"Loaded {df.shape[0]} annotations")
+            
+            # --- NEW RANDOMIZED VALIDATION SPLIT ---
             if not self.train_on_all_samples:
-                train_val_ds = pd.read_csv(f'{config.DATA_DIR}/train_val_flights.csv')
-                train_val_ds = train_val_ds[train_val_ds['part'] == f'part{part}'].reset_index(drop=True)
-
-                df = pd.merge(df, train_val_ds[['flight_id', 'is_validation']], how='left', on='flight_id')
-                print(df.shape)
+                # Randomly assign 10% of the flights to the validation set
+                unique_flights = df['flight_id'].unique()
+                np.random.seed(42) # Keep it deterministic
+                val_flights = np.random.choice(unique_flights, size=int(len(unique_flights)*0.1), replace=False)
+                
+                df['is_validation'] = df['flight_id'].isin(val_flights)
                 df = df[df['is_validation'] == (stage == self.STAGE_VALID)].reset_index(drop=True)
-                print(df.shape)
-
-            # discard frames with no objects for now
-            # df = df[~df['id'].isna()].reset_index(drop=True)
+                print(f"Kept {df.shape[0]} annotations for stage: {stage}")
 
             if small_subset:
                 df = df[:len(df) // 64]
@@ -236,7 +237,6 @@ class BaseDataset(torch.utils.data.Dataset):
                 item_id = row['id']
 
                 if not os.path.exists(self.img_fn(part, flight_id, img_name)):
-                    #print('skip missing img', self.img_fn(part, flight_id, img_name))
                     continue
 
                 key = (flight_id, frame_num)

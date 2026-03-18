@@ -241,12 +241,6 @@ class SegDetector:
 
         return tr
     
-    '''
-    目标检测主函数，参数为当前帧与上一帧图像
-    '''
-   '''
-    目标检测主函数，参数为当前帧与上一帧图像 (NOW SUPPORTS RGB+IR FUSION)
-    '''
     def detect_objects(self, cur_rgb, cur_ir, prev_rgb, prev_ir):
         batch_size = 1
         h, w = cur_rgb.shape
@@ -282,7 +276,7 @@ class SegDetector:
 
 
 
-    
+
 class SegTracker:
     def __init__(self, detector: SegDetector):
         self.detector = detector

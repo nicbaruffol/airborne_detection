@@ -163,15 +163,21 @@ class ItemsWithPlaneSampler(torch.utils.data.Sampler[int]):
 
 
 def combine_images(data, input_frames):
+    # The modified dataset will return [Batch, 2, H, W] tensors (RGB + IR)
     image = data['image'].float().cuda()
     image_prev0 = data['prev_image_aligned0'].float().cuda()
 
+    # We concatenate them along the channel dimension (dim=1) 
+    # to get [Batch, 4, H, W]
     images = [image_prev0, image]
-    for img_idx in range(1, input_frames - 1):
-        images.append(data[f'prev_image_aligned{img_idx}'].float().cuda())
+    
+    # If the config requests more historical frames, add them too
+    # (Divided by 2 because each historical step adds 2 channels now)
+    for img_idx in range(1, (input_frames // 2) - 1):
+        if f'prev_image_aligned{img_idx}' in data:
+            images.append(data[f'prev_image_aligned{img_idx}'].float().cuda())
 
-    tack(si  H, W = stacked.shape
-    return stacked.view(B, T * C, H, W)
+    return torch.cat(images, dim=1)
 
 
 class SkipNSampler(torch.utils.data.Sampler[int]):
@@ -192,7 +198,7 @@ class SkipNSampler(torch.utils.data.Sampler[int]):
 from check_frame_level_prediction import Box, DetectedItem, extend_bounding_boxes, calc_iou
 
 
-def find_fp_samples(model, dataset: dataset_tracking.TrackingDataset, step: int, batch_size: int = 8, input_frames: int = 2):
+def find_fp_samples(model, dataset: dataset_tracking.TrackingDataset, step: int, batch_size: int = 8, input_frames: int = 4):
     """
     Find the false positive samples for dataset with index step.
     :param model:
@@ -293,7 +299,7 @@ def check_find_fp_samples(experiment_name, epoch):
 
     dataset_train_full_size = dataset_tracking.TrackingDataset(
         stage=dataset_tracking.BaseDataset.STAGE_TRAIN,
-        parts=[1, 2, 3],
+        parts=[1],
         cfg_data={'dataset_params': dict(
             back_steps=[1],
             scale=1,
@@ -434,22 +440,20 @@ def train(experiment_name: str, fold: int, continue_epoch: int = -1):
     if continue_epoch > -1:
         print(f"{checkpoints_dir}/{continue_epoch:03}.pt")
         checkpoint = torch.load(f"{checkpoints_dir}/{continue_epoch:03}.pt")
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+    else:
+        # --- NEW CODE: Load the upgraded 4-channel RGB+IR weights! ---
+        init_weights_path = "/cluster/home/nbaruffol/airborne_detection/output/checkpoints/120_hrnet32_fused_init.pt"
         
-            if k in model_state_dict and state_dict[k].shape != model_state_dict[k].shape:
-                print(f"Adapting weights for {k} from {state_dict[k].shape} to {model_state_dict[k].shape}")
-                old_w = state_dict[k]
-                new_w = model_state_dict[k]
-                if old_w.dim() == 4 and new_w.dim() == 4 and old_w.shape[1] * 2 == new_w.shape[1]:
-                    new_w_cloned = new_w.clone()
-                    new_w_cloned[:, :old_w.shape[1], :, :] = old_w
-                    new_w_cloned[:, old_w.shape[1]:, :, :] = old_w
-                    state_dict[k] = new_w_cloned
-        model.load_state_dict(state_dict, strict=False)
-        try:
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        except ValueError as e:
-            print(f"Skipping optimizer/scheduler state loading due to shape mismatch: {e}")
+        if os.path.exists(init_weights_path):
+            print(f"Loading upgraded 4-channel RGB+IR weights from: {init_weights_path}")
+            # weights_only=False bypasses the PyTorch warning
+            checkpoint = torch.load(init_weights_path, map_location='cpu', weights_only=False)
+            model.load_state_dict(checkpoint["model_state_dict"], strict=True)
+        else:
+            print(f"WARNING: Fused weights not found at {init_weights_path}. Training from scratch!")
 
     grad_clip_value = train_params.get("grad_clip", 8.0)
     freeze_backbone_steps = train_params.get("freeze_backbone_steps", 0)
