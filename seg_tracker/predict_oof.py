@@ -13,7 +13,6 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from collections import defaultdict
 import madgrad
-import loss_asl
 import pickle
 from dataclasses import dataclass
 
@@ -42,8 +41,13 @@ def predict_detections(model, frame_numbers, images, flight_transforms, cache_di
     assert back_steps[0] == 1
     max_back_steps = max(back_steps)
     batch_size = len(images) - max_back_steps
-    h, w = images[-1].shape
-    X = np.zeros((batch_size, len(back_steps)+1, h, w), dtype=np.uint8)
+    # Support single-channel (h, w) or two-channel (2, h, w) images (fused RGB+IR)
+    if images[-1].ndim == 3:
+        n_ch, h, w = images[-1].shape
+    else:
+        n_ch = 1
+        h, w = images[-1].shape
+    X = np.zeros((batch_size, (len(back_steps)+1)*n_ch, h, w), dtype=np.uint8)
 
     # dx = prev_img_transforms['dx'].values
     # dy = prev_img_transforms['dy'].values
@@ -83,23 +87,37 @@ def predict_detections(model, frame_numbers, images, flight_transforms, cache_di
                 prev_tr = prev_step_transforms[back_step-1] @ prev_tr
             prev_step_transforms[back_step] = prev_tr
 
-        prev_img_aligned = cv2.warpAffine(
-            images[i + max_back_steps - 1],
-            prev_step_transforms[1][:2, :],  # the same crop as with the cur image
-            dsize=(w, h),
-            flags=cv2.INTER_LINEAR)
-
-        X[i, 0, :, :] = prev_img_aligned
-        X[i, 1, :, :] = images[i + max_back_steps]
-
-        for bsi, back_step in enumerate(back_steps[1:]):
+        if n_ch > 1:
+            for c in range(n_ch):
+                X[i, c, :, :] = cv2.warpAffine(
+                    images[i + max_back_steps - 1][c],
+                    prev_step_transforms[1][:2, :],
+                    dsize=(w, h), flags=cv2.INTER_LINEAR)
+            X[i, n_ch:2*n_ch, :, :] = images[i + max_back_steps]
+            for bsi, back_step in enumerate(back_steps[1:]):
+                for c in range(n_ch):
+                    X[i, (bsi+2)*n_ch+c, :, :] = cv2.warpAffine(
+                        images[i + max_back_steps - back_step][c],
+                        prev_step_transforms[back_step][:2, :],
+                        dsize=(w, h), flags=cv2.INTER_LINEAR)
+        else:
             prev_img_aligned = cv2.warpAffine(
-                images[i + max_back_steps - back_step],
-                prev_step_transforms[back_step][:2, :],  # the same crop as with the cur image
+                images[i + max_back_steps - 1],
+                prev_step_transforms[1][:2, :],  # the same crop as with the cur image
                 dsize=(w, h),
                 flags=cv2.INTER_LINEAR)
 
-            X[i, bsi+2, :, :] = prev_img_aligned
+            X[i, 0, :, :] = prev_img_aligned
+            X[i, 1, :, :] = images[i + max_back_steps]
+
+            for bsi, back_step in enumerate(back_steps[1:]):
+                prev_img_aligned = cv2.warpAffine(
+                    images[i + max_back_steps - back_step],
+                    prev_step_transforms[back_step][:2, :],  # the same crop as with the cur image
+                    dsize=(w, h),
+                    flags=cv2.INTER_LINEAR)
+
+                X[i, bsi+2, :, :] = prev_img_aligned
 
         # common_utils.print_stats('x', np.transpose(X[i, :3, :, :], (1, 2, 0)))
         # plt.imshow(np.transpose(X[i, :3, :, :], (1, 2, 0)))
@@ -231,6 +249,8 @@ def save_predictions(experiment_name: str, fold: int, epoch: int, part='part1', 
 
     flights = flights[from_flight:from_flight+nb_flights:step]
 
+    is_fused = cfg['model_params'].get('input_frames', 2) == 4
+
     load_img_stage = mpipe.OrderedStage(load_img, 1)
     decode_img_stage = mpipe.OrderedStage(decode_img, 16)
     load_img_stage.link(decode_img_stage)
@@ -250,28 +270,64 @@ def save_predictions(experiment_name: str, fold: int, epoch: int, part='part1', 
             continue
         frame_transforms = pd.read_pickle(f'{config.DATA_DIR}/frame_transforms/{part}/{flight_id}.pkl')
 
-        crop_w = 2432
-        crop_h = 2048
+        crop_w = None
+        crop_h = None
 
-        last_img = np.zeros((crop_h, crop_w), dtype=np.uint8)
+        if is_fused:
+            img_iter = enumerate(file_names)
+        else:
+            img_iter = enumerate(limited_pipe(pipe, file_names, 16))
 
         load_failed = []
 
         frame_predictions = []
 
         images = []  # not processed images yet of one frame + batch size
+        last_img = None
 
-        for img_num, (fn, img) in tqdm(enumerate(limited_pipe(pipe, file_names, 16)), total=len(file_names)):
-            load_failed.append(img is None)
-            if img is None:
+        for img_num, item in tqdm(img_iter, total=len(file_names)):
+            if is_fused:
+                fn = item
+                fn_rgb = fn.replace('.jpg', '_rgb.jpg')
+                fn_ir = fn.replace('.jpg', '_ir.jpg')
+                rgb = cv2.imread(fn_rgb, cv2.IMREAD_GRAYSCALE)
+                ir = cv2.imread(fn_ir, cv2.IMREAD_GRAYSCALE)
+                failed = rgb is None or ir is None
+                if not failed:
+                    if ir.shape != rgb.shape:
+                        ir = cv2.resize(ir, (rgb.shape[1], rgb.shape[0]), interpolation=cv2.INTER_LINEAR)
+                    img = np.stack([rgb, ir], axis=0)
+                else:
+                    img = None
+            else:
+                fn, img = item
+                failed = img is None
+            load_failed.append(failed)
+
+            # Set crop dimensions from first successfully loaded image
+            if crop_w is None and not failed:
+                raw_h, raw_w = (img.shape[1], img.shape[2]) if is_fused else img.shape
+                crop_h = (raw_h // 32) * 32
+                crop_w = (raw_w // 32) * 32
+                last_img = np.zeros((2, crop_h, crop_w) if is_fused else (crop_h, crop_w), dtype=np.uint8)
+
+            if last_img is None:
+                continue  # skip until we have dimensions from a valid image
+
+            if failed:
                 img = last_img
             last_img = img
 
-            h, w = img.shape
-
-            y0 = (h - crop_h) // 2
-            x0 = (w - crop_w) // 2
-            img_crop = img[y0:y0 + crop_h, x0: x0 + crop_w]
+            if is_fused:
+                h, w = img.shape[1], img.shape[2]
+                y0 = max((h - crop_h) // 2, 0)
+                x0 = max((w - crop_w) // 2, 0)
+                img_crop = img[:, y0:y0 + crop_h, x0:x0 + crop_w]
+            else:
+                h, w = img.shape
+                y0 = max((h - crop_h) // 2, 0)
+                x0 = max((w - crop_w) // 2, 0)
+                img_crop = img[y0:y0 + crop_h, x0:x0 + crop_w]
 
             images.append(img_crop)
 

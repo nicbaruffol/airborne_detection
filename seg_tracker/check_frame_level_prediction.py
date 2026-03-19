@@ -213,6 +213,7 @@ def check_frame_level_predictions(experiment_name: str, epoch=None, part='part1'
     df_by_part = {
         part: pd.read_csv(f'{config.DATA_DIR}/{part}/ImageSets/groundtruth.csv')
         for part in ['part1', 'part2', 'part3']
+        if os.path.exists(f'{config.DATA_DIR}/{part}/ImageSets/groundtruth.csv')
     }
 
     with common_utils.timeit_context('load df'):
@@ -445,6 +446,7 @@ def match_predictions_to_gt(experiment_name: str,
     df_by_part = {
         part: pd.read_csv(f'{config.DATA_DIR}/{part}/ImageSets/groundtruth.csv')
         for part in ['part1', 'part2', 'part3']
+        if os.path.exists(f'{config.DATA_DIR}/{part}/ImageSets/groundtruth.csv')
     }
 
     with common_utils.timeit_context('load df'):

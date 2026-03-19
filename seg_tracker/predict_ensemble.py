@@ -30,7 +30,7 @@ def predict_ensemble(X, models_full_res, models_crops, full_res_threshold, x_off
 
     ## models_full_res： HRNetSeg 和 EffDetSegmentation8x 两个模型分别保存推理结果
     for model in models_full_res:
-        with torch.cuda.amp.autocast():
+        with torch.amp.autocast('cuda'):
             pred = model(X)
 
         pred['mask'] = torch.sigmoid(pred['mask'][0].float()) # 1,1,256,320
@@ -101,7 +101,7 @@ def predict_ensemble(X, models_full_res, models_crops, full_res_threshold, x_off
 
     X_crop_combined = torch.cat([c.X for c in crops], dim=0)
     for model in models_crops:
-        with torch.cuda.amp.autocast():
+        with torch.amp.autocast('cuda'):
             pred = model(X_crop_combined)
 
         pred_mask = torch.sigmoid(pred['mask'].float()).cpu().detach().numpy()

@@ -32,7 +32,7 @@ class SegDetector:
                 base_model_name="resnet34",
                 weight_scale=3
             ), pretrained=False)
-        self.model_transform.load_state_dict(torch.load('/cluster/home/nbaruffol/airborne_detection/output/checkpoints/030_tr_tsn_rn34_w3_crop_borders/0/260.pt')["model_state_dict"])
+        self.model_transform.load_state_dict(torch.load('/cluster/home/nbaruffol/airborne_detection/output/checkpoints/030_tr_tsn_rn34_w3_crop_borders/0/500.pt')["model_state_dict"])
         self.model_transform = self.model_transform.cuda()
         self.model_transform.eval()
 
