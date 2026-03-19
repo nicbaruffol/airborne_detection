@@ -131,7 +131,7 @@ class BaseDataset(torch.utils.data.Dataset):
         else:  # if stage == self.STAGE_VALID:
             self.is_training = False
 
-        parts = [1, 2]
+        parts = [1, 2, 3]
 
         self.frames: List[Frame] = []
         self.frame_nums_with_items: List[int] = []

@@ -4,6 +4,7 @@ model_params:
   model_type: "models_segmentation"
   model_cls: "HRNetSegmentation"
   base_model_name: "hrnet_w32"
+  pretrained_weights: "airborne_detection/output/checkpoints/120_hrnet32_all/0/2220.pt" # <--- ADD THIS LINE (Update the path!)
   input_frames: 2
   feature_location: ''
   combine_outputs_dim: 512
@@ -39,7 +40,7 @@ test_data_loader:
 train_params:
   nb_samples_per_epoch: 2000
   nb_samples_valid: 500
-  nb_epochs: 2222
+  nb_epochs: 4000
   optimizer: madgrad
   scheduler: CosineAnnealingWarmRestarts
   scheduler_period: 16

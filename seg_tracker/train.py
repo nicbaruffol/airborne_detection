@@ -395,6 +395,13 @@ def train(experiment_name: str, fold: int, continue_epoch: int = -1):
     print(model.__class__.__name__)
     model = model.cuda()
     model.train()
+    
+    # NEW: Load pre-trained weights from an old run without resuming the optimizer
+    if 'pretrained_weights' in model_params and continue_epoch == -1:
+        print(f"---> TRANSFER LEARNING: Loading old weights from {model_params.pretrained_weights} <---")
+        checkpoint = torch.load(model_params.pretrained_weights)
+        # strict=False allows it to load even if the new config slightly changes the model layers
+        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
 
     initial_lr = float(train_params.initial_lr)
     if train_params.optimizer == "adamW":
