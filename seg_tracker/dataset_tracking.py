@@ -131,7 +131,7 @@ class BaseDataset(torch.utils.data.Dataset):
         else:  # if stage == self.STAGE_VALID:
             self.is_training = False
 
-        parts = [1, 2, 3]
+        parts = [1]
 
         self.frames: List[Frame] = []
         self.frame_nums_with_items: List[int] = []
@@ -154,8 +154,25 @@ class BaseDataset(torch.utils.data.Dataset):
         print(stage, len(self.frames), len(self.frame_nums_with_items), len(self.frame_nums_with_match_items))
 
     def img_fn(self, part, flight_id, img_name):
-        return f'{config.DATA_DIR}/part{part}/Images{self.scale_str}/{flight_id}/{img_name}.{config.IMG_FORMAT}'
+        # 1. Standard official path format
+        path = f'{config.DATA_DIR}/part{part}/Images/{flight_id}/{img_name}.{config.IMG_FORMAT}'
+        if os.path.exists(path):
+            return path
 
+        # 2. Weird extracted format
+        path = f'{config.DATA_DIR}/part{part}/Images/part{part}{flight_id}/{img_name}.{config.IMG_FORMAT}'
+        if os.path.exists(path):
+            return path
+
+        # 3. Top-level Images directory
+        path = f'{config.DATA_DIR}/Images/{flight_id}/{img_name}.{config.IMG_FORMAT}'
+        if os.path.exists(path):
+            return path
+
+        # 4. Images/partX/flight_id layout
+        path = f'{config.DATA_DIR}/Images/part{part}/{flight_id}/{img_name}.{config.IMG_FORMAT}'
+        return path
+    
     def prepare_train_val_split(self):
         """
             Prepare the train_val_flights.csv file, selecting the isolated in time group of 572 flights,
@@ -187,7 +204,7 @@ class BaseDataset(torch.utils.data.Dataset):
             suffix = '_all' if self.train_on_all_samples else ''
             cache_fn = f'{config.DATA_DIR}/ds{self.scale_str}_{part}_{stage}{suffix}.pkl'
         print(cache_fn)
-        self.prepare_train_val_split()
+        # self.prepare_train_val_split()
 
         if not os.path.exists(cache_fn):
             frames_dict = {}
@@ -217,7 +234,7 @@ class BaseDataset(torch.utils.data.Dataset):
 
             for _, row in df.iterrows():
                 flight_id = row['flight_id']
-                img_name = row['img_name'][:-4]
+                img_name = os.path.splitext(row['img_name'])[0]
                 frame_num = row['frame']
                 range_distance_m = row['range_distance_m']
                 gt_left = row['gt_left']
@@ -606,13 +623,19 @@ class TrackingDataset(BaseDataset):
 
         self.transforms = {}
         for part in self.parts:
-            with common_utils.timeit_context('load transforms ' + str(part)):
-                self.transforms[part] = {}
-                transforms_dir = f'{config.DATA_DIR}/frame_transforms/part{part}'
-                for fn in os.listdir(transforms_dir):
-                    if fn.endswith('.pkl'):
-                        flight_id = fn[:-4]
-                        self.transforms[part][flight_id] = pd.read_pickle(f'{transforms_dir}/{flight_id}.pkl')
+            self.transforms[part] = {}
+            transforms_dir = f'{config.DATA_DIR}/frame_transforms/part{part}'
+            
+            # THE FIX: Only attempt to list the directory if it actually exists
+            if os.path.exists(transforms_dir):
+                with common_utils.timeit_context('load transforms ' + str(part)):
+                    for fn in os.listdir(transforms_dir):
+                        if fn.endswith('.pkl'):
+                            flight_id = fn[:-4]
+                            self.transforms[part][flight_id] = pd.read_pickle(f'{transforms_dir}/{flight_id}.pkl')
+            else:
+                print(f"Note: No offline transforms found at {transforms_dir}. Evaluation will use on-the-fly alignment.")
+
 
         self.fpm_samples = {}  # frame_index -> [[conf, cx, cy], [conf, cx, cy], ...]]
 
@@ -706,7 +729,10 @@ class TrackingDataset(BaseDataset):
         # print(cur_img_transform)
 
         frames_transform = {0: cur_img_transform}
-        flight_transforms = self.transforms[frame.part][frame.flight_id]
+        flight_transforms = self.transforms[frame.part].get(
+            frame.flight_id,
+            pd.DataFrame(columns=['frame', 'dx', 'dy', 'angle'])
+        )
 
         for frame_back_step in range(1, max(frame_back_steps) + 1):
             frame_num = frame.frame_num - frame_back_step + 1

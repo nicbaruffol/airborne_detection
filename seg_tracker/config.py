@@ -1,8 +1,8 @@
 import os
 
 # Look for 'FAST_DATA_DIR'. If it's not set, default to your scratch folder.
-DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/airborne_dataset_new')
-SRC_DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/airborne_dataset_new')
+DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/raw_videos/rgb_fixed_1_ground_truth')
+SRC_DATA_DIR = os.environ.get('FAST_DATA_DIR', '/cluster/scratch/nbaruffol/raw_videos/rgb_fixed_1_ground_truth')
 
 IMG_FORMAT = 'jpg'
 

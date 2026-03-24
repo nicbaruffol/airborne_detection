@@ -12,8 +12,10 @@ def convert_to_jpeg(png_path):
             
         jpg_path = png_path.rsplit('.', 1)[0] + '.jpg'
         
-        # Open and save
+        # Open and save (JPEG doesn't support alpha channels)
         with Image.open(png_path) as img:
+            if img.mode in ('RGBA', 'LA', 'P'):
+                img = img.convert('RGB')
             img.save(jpg_path, 'JPEG', quality=95)
         
         # Delete original
@@ -24,11 +26,11 @@ def convert_to_jpeg(png_path):
         return False
 
 if __name__ == '__main__':
-    dataset_root = '/cluster/scratch/nbaruffol/airborne_dataset_new' 
+    dataset_root = '/cluster/scratch/nbaruffol/raw_videos/rgb_fixed_1_ground_truth' 
     
     print("Finding all PNG images... (This might take 10-20 minutes on a network drive)")
     # Using iglob creates an iterator instead of a massive list, saving RAM!
-    search_pattern = os.path.join(dataset_root, 'part*', 'Images', '*', '*.png')
+    search_pattern = os.path.join(dataset_root, 'Images', 'part*', '*', '*.png')
     
     # We still need a list to feed the executor, but we can build it safely
     png_files = list(glob.glob(search_pattern))

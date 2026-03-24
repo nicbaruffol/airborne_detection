@@ -4,7 +4,7 @@ model_params:
   model_type: "models_segmentation"
   model_cls: "HRNetSegmentation"
   base_model_name: "hrnet_w32"
-  pretrained_weights: "airborne_detection/output/checkpoints/120_hrnet32_all/0/2220.pt" # <--- ADD THIS LINE (Update the path!)
+  pretrained_weights: "/cluster/home/nbaruffol/airborne_detection/output/checkpoints/120_hrnet32_all/0/2220.pt"
   input_frames: 2
   feature_location: ''
   combine_outputs_dim: 512
@@ -25,15 +25,15 @@ dataset_params:
 ## Data loader options
 train_data_loader:
   batch_size: 16
-  num_workers: 16
+  num_workers: 8
 
 val_data_loader:
   batch_size: 16
-  num_workers: 16
+  num_workers: 8
 
 test_data_loader:
   batch_size: 16
-  num_workers: 16
+  num_workers: 8
 
 ###################
 ## Train params

@@ -126,15 +126,13 @@ class DatasetTransform(torch.utils.data.Dataset):
         print(stage, len(self.frames))
 
     def img_fn(self, part, flight_id, img_name):
-        # 1. First, try the standard official path format
         path = f'{config.DATA_DIR}/part{part}/Images/{flight_id}/{img_name}.{config.IMG_FORMAT}'
-        
-        # 2. If that fails, try the weird extracted format where "partX" is glued to the front of the folder name!
         if not os.path.exists(path):
             path = f'{config.DATA_DIR}/part{part}/Images/part{part}{flight_id}/{img_name}.{config.IMG_FORMAT}'
-            
+        if not os.path.exists(path):
+            path = f'{config.DATA_DIR}/Images/part{part}/{flight_id}/{img_name}.{config.IMG_FORMAT}'
         return path
-    
+
     def load_ds(self, part, small_subset=False) -> pd.DataFrame:
         if small_subset:
             cache_fn = f'{config.DATA_DIR}/ds_transform_{part}_small.pkl'
