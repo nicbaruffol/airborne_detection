@@ -32,7 +32,7 @@ class SegDetector:
                 base_model_name="resnet34",
                 weight_scale=3
             ), pretrained=False)
-        self.model_transform.load_state_dict(torch.load('/cluster/home/nbaruffol/airborne_detection/output/checkpoints/030_tr_tsn_rn34_w3_crop_borders/0/260.pt')["model_state_dict"])
+        self.model_transform.load_state_dict(torch.load('/cluster/home/nbaruffol/airborne_detection/output/checkpoints/030_tr_tsn_rn34_w3_crop_borders/0/500.pt')["model_state_dict"])
         self.model_transform = self.model_transform.cuda()
         self.model_transform.eval()
 
@@ -40,7 +40,7 @@ class SegDetector:
         self.model_seg = models_segmentation.HRNetSegmentation(
             cfg=dict(
                 base_model_name="hrnet_w32",
-                input_frames=2,
+                input_frames=4,
                 feature_location='',
                 combine_outputs_dim=512,
                 output_binary_mask=True,
@@ -48,7 +48,7 @@ class SegDetector:
                 pred_scale=8
             ), pretrained=False)
         
-        checkpoint = torch.load('output/checkpoints/120_hrnet32_all/0/2220.pt')
+        checkpoint = torch.load('/cluster/home/nbaruffol/airborne_detection/output/checkpoints/120_hrnet32_fused/0/2220.pt')
         self.model_seg.load_state_dict(checkpoint["model_state_dict"])      # <--- FIXED!
         self.model_seg = self.model_seg.cuda()
         self.model_seg.eval()
